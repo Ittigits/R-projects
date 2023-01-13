@@ -1,0 +1,1431 @@
+---
+title: "Covid-Data- Analysis"
+author: "ASHA"
+date: '2023-01-13'
+output: git_document
+---
+<style type="text/css">
+  body{
+  font-size: 18pt;
+}
+code.r{
+  font-size: 18px;
+}
+pre {
+  font-size: 18px
+}
+</style>
+
+# Introduction
+
+### Dataset Description
+
+This data set is composed of a curated collection of over 200 publicly available COVID-19 related data sets from sources like Johns Hopkins, the WHO, the World Bank, the New York Times, and many others. It includes data on a wide variety of potentially powerful statistics and indicators, like local and national infection rates, global social distancing policies, geospatial data on movement of people, and more.
+
+This was a challenge/competition on Kaggle. But the key questions or tasks were not available during this current analysis. Came up with new Questions to analyze the data.
+
+The dataset was downloaded from Kaggle.[Data set](https://www.kaggle.com/datasets/roche-data-science-coalition/uncover)
+
+### Loading packages
+
+```{r results=FALSE,message=FALSE,warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(skimr)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(gridExtra)
+library(scales)
+
+```
+
+### Reading Data
+
+```{r results=FALSE,message=FALSE,warning=FALSE}
+Data_at_admission <- read_excel("~/Asha/project_with_Merin/Canada_Hosp1_COVID_InpatientData.xlsx", sheet = "Data-at-admission")
+
+Days_breakdown <- read_excel("~/Asha/project_with_Merin/Canada_Hosp1_COVID_InpatientData.xlsx", sheet = "Days-breakdown")
+
+Hospital_length_of_stay <- read_excel("~/Asha/project_with_Merin/Canada_Hosp1_COVID_InpatientData.xlsx", sheet = "Hospital-length-of-stay")
+
+Medication_Static_List <- read_excel("~/Asha/project_with_Merin/Canada_Hosp1_COVID_InpatientData.xlsx", sheet = "Medication-Static-List")
+
+```
+
+
+### Data Cleaning
+
+**<span style="color: red;">Cleaned</span> the comorbidities column to remove symbols and signs (“\” [ ] ). Made <span style="color: red;">longdata</span> of this column for the analysis.**
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# separating each comorbidities to individual cols
+Data_at_admission1 <- separate(Data_at_admission,col = comorbidities,into = c('como1','como2','como3','como4','como5','como6'),sep=",")
+
+# removing symbols and signs
+Data_at_admission1$como1 <- gsub('[[:punct:]]',' ', Data_at_admission1$como1)
+Data_at_admission1$como1 <- trimws(Data_at_admission1$como1)  # trimming white spaces
+
+Data_at_admission1$como2 <- gsub('[[:punct:]]',' ', Data_at_admission1$como2)
+Data_at_admission1$como2 <- trimws(Data_at_admission1$como2)  
+
+Data_at_admission1$como3 <- gsub('[[:punct:]]',' ', Data_at_admission1$como3)
+Data_at_admission1$como3 <- trimws(Data_at_admission1$como3)  
+
+Data_at_admission1$como4 <- gsub('[[:punct:]]',' ', Data_at_admission1$como4)
+Data_at_admission1$como4 <- trimws(Data_at_admission1$como4)  
+
+Data_at_admission1$como5 <- gsub('[[:punct:]]',' ', Data_at_admission1$como5)
+Data_at_admission1$como5 <- trimws(Data_at_admission1$como5)  
+
+Data_at_admission1$como6 <- gsub('[[:punct:]]',' ', Data_at_admission1$como6)
+Data_at_admission1$como6 <- trimws(Data_at_admission1$como6)  
+
+dataForLong <-
+Data_at_admission1 %>% 
+  select(id,como1,como2,como3,como4,como5,como6)      #new df with only id and como cols
+
+# making long data to get each comorbidities in a row
+longcomodata <- pivot_longer(dataForLong,cols=c('como1','como2','como3','como4','como5','como6'),names_to="type",
+                             values_to="comorbidities") %>% 
+  na.omit()    # removing NA rows
+
+longcomodata <- longcomodata[!(longcomodata$comorbidities==""),]     #removing rows with empty cells in comorbidities col
+
+head(longcomodata)
+
+dataForLong$Comorbidities=paste(dataForLong$como1,",",dataForLong$como2,",",dataForLong$como3,",",dataForLong$como4,",",dataForLong$como5,",",dataForLong$como6)     # Added new col with all comos in one cell without signs and symbols
+
+dataForLong$Comorbidities <- gsub('NA','',dataForLong$Comorbidities)    # Removed NAs from Comorbidities col
+
+head(dataForLong)
+#save(longcomodata,file = "longcomodata.RData")       # saving this df for further analysis on tableau
+#write.csv(longcomodata,file = "longcomodata.csv",row.names = FALSE)      # saving as a n excel file
+```
+
+
+# VIZES OF THE DATA
+
+### 1. Age distribution graph.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+Data_at_admission %>% 
+  ggplot()+
+  geom_bar(aes(x=age,fill=sex))+
+  labs(title = "Age distribution of Patients")+
+  xlab("Age")+
+  ylab("No.of patients")+
+  theme_minimal()
+
+```
+
+**<span style="color: red;">Observation</span>:-Most no. of patients in the age of 60s and 70s.**
+
+### 2. How many male and female patients are admitted for each reason for admission?
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+Data_at_admission %>% 
+   select(reason_for_admission,sex) %>%   
+  group_by(reason_for_admission,sex) %>% 
+   count(sex,name = "count",sort = TRUE)
+
+Data_at_admission %>% 
+   select(reason_for_admission,sex) %>%   
+  group_by(reason_for_admission,sex) %>% 
+   count(sex,name = "count",sort = TRUE) %>% 
+  ggplot()+
+  geom_point(aes(x=count,y=reason_for_admission,color=sex))+
+  labs(title = "Patients in each reason of admission", subtitle = "Distinguished sex with color of points")
+  
+```
+
+
+*<span style="color: red;">Observation</span>:-*
+
+**In most reasons of admissions no. of male patients are more than the female.**
+
+**Covid-19 related admissions are majority in this dataset of 508 patients.**
+
+### 3. How many patients died in the hospital
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# No of patients died
+Hospital_length_of_stay %>% 
+  filter(did_the_patient_expire_in_hospital=="Yes") %>% 
+  count(name = "No_of_patients_died")      
+
+# No of female and male patents out of 508 patients
+Data_at_admission %>% 
+  group_by(sex) %>% 
+  count(name = "No_of_patients")      
+
+# No of female and male patients died
+# Merged DFs Data_at_admission,Hospital_length_of_stay
+admission_hospital_data<-
+merge(
+  x=Data_at_admission,
+  y=Hospital_length_of_stay,
+  by.x = 'id',
+  by.y = 'parent_id'
+) 
+
+admission_hospital_data %>% 
+ filter(did_the_patient_expire_in_hospital=="Yes") %>%
+  group_by(sex) %>% 
+  count(name = "No_of_patients_died")        
+  
+```
+
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+Died_patients_count<-
+admission_hospital_data %>% 
+  group_by(sex) %>%
+  ggplot()+
+  geom_bar(aes(x=sex,fill=did_the_patient_expire_in_hospital))+
+ labs(title = "No. of female and male Patients",subtitle="Stacked no. of patients died and not died")+
+  xlab("Sex")+
+  ylab("No.of patients")+
+  theme(legend.position = "none")
+
+Died_patients_perct<-
+admission_hospital_data %>% 
+  group_by(sex) %>%
+  ggplot()+
+  geom_bar(aes(x=sex,fill=did_the_patient_expire_in_hospital),position="fill")+
+ labs(title = "% of died patients")+
+  xlab("Sex")+
+  ylab("Death rate")+
+  guides(fill=guide_legend(title = "Patient expiered in hospital"))+
+  theme(legend.position = "top")
+
+grid.arrange(Died_patients_count,Died_patients_perct,nrow=1,ncol=2)
+
+```
+
+
+*<span style="color: red;">Observation</span>:-*
+
+**1. There were more male patients than female in the dataset.**
+
+**2. 90 patients expired in hospital out of 508 patients in the dataset.**
+
+**3. Male death rate was higher than female.**
+
+# ANALYSIS :
+## PART 1
+
+### 1. Average, min, and max age, height and weight of the patients who are admitted
+
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Assigning the needed col-manes to which the summary to be found to a vec
+vec<- c(
+  "age","height","weight"
+)
+
+summary(
+  Data_at_admission[vec]
+)
+
+```
+
+### 2.	Most common comorbidities found in patients in the dataset.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+longcomodata %>% 
+  group_by(comorbidities) %>% 
+  tally(name="count",sort = TRUE) %>% 
+  head()
+
+merge(
+  x=longcomodata,
+  y=Hospital_length_of_stay,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.y = TRUE
+)%>% 
+ group_by(comorbidities) %>% 
+  ggplot()+
+  geom_bar(aes(x=comorbidities,fill=did_the_patient_expire_in_hospital))+
+  labs(title = "Common comorbidities amoung Patients",subtitle = "Distingushed died and not died patients within common comorbidities",fill="Patient expired?")+
+  ylab("No.of patients")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90,hjust = 1))
+
+```
+
+**<span style="color: red;">Observation</span>:- Hypertension and Diabetes are the common comorbidities found in most of the patients and most patients had other medical conditions.**
+
+### 3. Smoking history among patients.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+Data_at_admission %>% 
+  group_by(smoking_history) %>% 
+  summarise(count=n())
+
+admission_hospital_data %>% 
+  group_by(smoking_history) %>%
+  ggplot()+
+  geom_bar(aes(x=smoking_history,fill=did_the_patient_expire_in_hospital),position = "fill")+
+  labs(title = "Smoking status amoung Patients",subtitle = "Displayed death rate in %",fill="Patient expired?")+
+  ylab("Percentage")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90,hjust = 1))
+
+```
+
+**<span style="color: red;">Observation</span>:- Ex-smokers does show a bit higher death rate than non smokers.**
+
+###	4. Average Vitals in patients in different smoking category
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#d.Patients in different smokers grouping
+
+Data_at_admission %>% 
+  group_by(smoking_history) %>% 
+  summarise(
+    Avg_HeartRate=mean(heart_rate,na.rm=TRUE),
+    Avg_RespiratoryRate=mean(respiratory_rate,na.rm=TRUE),
+    Avg_OxygenSaturation=mean(oxygen_saturation,na.rm=TRUE),
+    Avg_sysBP=mean(systolic_blood_pressure,na.rm=TRUE),
+    Avg_diaBP=mean(diastolic_blood_pressure,na.rm=TRUE),
+    Avg_temp=mean(temperature,na.rm=TRUE)
+  ) 
+
+resp<-
+admission_hospital_data %>% 
+  group_by(smoking_history) %>%
+  ggplot()+
+  geom_point(aes(x=smoking_history,y=respiratory_rate,color=did_the_patient_expire_in_hospital))+
+  geom_hline(yintercept = mean(Data_at_admission$respiratory_rate, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  labs(title = "Respiratory_rate comparison")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90,hjust = 1))+
+   theme(legend.position = "top")+
+   guides(color = guide_legend(title = "Did the patient die"))
+
+heart<-
+admission_hospital_data %>% 
+  group_by(smoking_history) %>%
+  ggplot()+
+  geom_point(aes(x=smoking_history,y=heart_rate,color=did_the_patient_expire_in_hospital))+
+  geom_hline(yintercept = mean(Data_at_admission$heart_rate, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  labs(title = "Heart rate comparison",
+       subtitle = "All patients avg value as green dotted line")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90,hjust = 1))+
+   theme(legend.position = "none")
+
+sbp<-
+admission_hospital_data %>% 
+  group_by(smoking_history) %>%
+  ggplot()+
+  geom_point(aes(x=smoking_history,y=systolic_blood_pressure,color=did_the_patient_expire_in_hospital))+
+  geom_hline(yintercept = mean(Data_at_admission$systolic_blood_pressure, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  labs(title = "Systolic_blood_pressure comparison")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90,hjust = 1))+
+   theme(legend.position = "top")+
+   guides(color = guide_legend(title = "Did the patient die"))
+
+dsbp<-
+admission_hospital_data %>% 
+  group_by(smoking_history) %>%
+  ggplot()+
+  geom_point(aes(x=smoking_history,y=diastolic_blood_pressure,color=did_the_patient_expire_in_hospital))+
+  geom_hline(yintercept = mean(Data_at_admission$diastolic_blood_pressure, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  labs(title = "Diastolic_blood_pressure comparison",
+       subtitle = "All patients avg value as green dotted line")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90,hjust = 1))+
+   theme(legend.position = "none")
+
+grid.arrange(heart,resp,nrow = 1,ncol=2)
+grid.arrange(dsbp ,sbp,nrow = 1,ncol=2)
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+
+**Systolic bp normal reading 90-120:- Avg Sbp of all patients in the dataset is above 120, smoker group avg Sbp is bit high(157). Rest of the reading do not show much difference from the dataset avg readings**
+
+### 5. Average Vitals in different groups below:
+
+*<span style="color: blue;">a.	In male VS female patients</span>*
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#a.In male VS female patients
+
+Data_at_admission %>% 
+  group_by(sex) %>% 
+  summarise(
+    RespRate_avg=mean(respiratory_rate,na.rm=TRUE),
+    Oxy_Sat_avg=mean(oxygen_saturation,na.rm=TRUE),
+    SysBP_avg=mean(systolic_blood_pressure,na.rm=TRUE),
+    DiaBP_avg=mean(diastolic_blood_pressure,na.rm=TRUE),
+    HeartRate_avg=mean(heart_rate,na.rm=TRUE),
+    Temp_avg=mean(temperature,na.rm=TRUE)
+  ) 
+
+```
+
+
+*<span style="color: blue;">b.	Patients who are in WARD vs ICU</span>*
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#b.Patients who are in WARD VS ICU
+
+Data_at_admission %>% 
+  group_by(admission_disposition) %>% 
+  summarise(
+    RespRate_avg=mean(respiratory_rate,na.rm=TRUE),
+    Oxy_Sat_avg=mean(oxygen_saturation,na.rm=TRUE),
+    SysBP_avg=mean(systolic_blood_pressure,na.rm=TRUE),
+    DiaBP_avg=mean(diastolic_blood_pressure,na.rm=TRUE),
+    HeartRate_avg=mean(heart_rate,na.rm=TRUE),
+    Temp_avg=mean(temperature,na.rm=TRUE)
+  ) 
+
+```
+
+
+*<span style="color: blue;">c.	Patients who are less than 50 vs over 50 years old.</span>*
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#c.Patients who are less than 50 vs over 50 years old.
+
+Data_at_admission %>% 
+  mutate(age_limit=case_when(
+    age<50 ~'Below 50',
+    age>=50 ~ '50 and above'
+  )) %>% 
+  group_by(age_limit) %>% 
+  summarise(
+    RespRate_avg=mean(respiratory_rate,na.rm=TRUE),
+    Oxy_Sat_avg=mean(oxygen_saturation,na.rm=TRUE),
+    SysBP_avg=mean(systolic_blood_pressure,na.rm=TRUE),
+    DiaBP_avg=mean(diastolic_blood_pressure,na.rm=TRUE),
+    HeartRate_avg=mean(heart_rate,na.rm=TRUE),
+    Temp_avg=mean(temperature,na.rm=TRUE)
+  ) 
+
+```
+
+*<span style="color: red;">Observation</span>:- *
+
+**a) Resp-rate and Sbp was high for both male & female;male readings were higher. **
+
+**b) Oxygen saturation was significantly low  and respiratory rate was high in ICU patients(43 ICU/465 WARD patients),Oxygen saturation below 90% is very concerning and indicates an emergency.**
+
+**c) Avg Resp-rate was high in age group 50 and below, Sbp was high in both group, Heart rate was higher in <50 age group**
+
+### 6. Patients in different age groups below:
+
+a.	14-30
+
+b.	31-50
+
+c.	51-75
+
+d.	76-90
+
+e.	90+
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Adding a new col; age_group
+Data_at_admission_AgeGp <-
+  Data_at_admission %>% 
+  mutate(age_group=case_when(
+    age>=14 & age<=30 ~ '14-30',
+    age>=31 & age<=50 ~ '31-50',
+    age>=51 & age<=75 ~ '51-75',
+    age>=76 & age<=90 ~ '76-90',
+    age>90 ~ '90+',
+  ))
+```
+
+
+### 7. No.of patients in each age group
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+Data_at_admission_AgeGp %>% 
+  group_by(age_group) %>% 
+  summarise(Patient_Count=n())
+```
+
+**<span style="color: red;">Observation</span>:- Most patients are in the age group 51-75.**
+
+### 8.Average length of stay of patients in each age group.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Merging 2 DFs
+admission_hospital_agegp_data <-
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Hospital_length_of_stay,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) 
+avg_stay<-
+admission_hospital_agegp_data%>% 
+  group_by(age_group) %>% 
+  summarise(Avg_length_ofStay = round(mean(hospital_length_of_stay),0))
+avg_stay
+```
+
+**<span style="color: red;">Observation</span>:- Average length of stay is more than 10 days in age group above 50.**
+
+### 9.No.of patients expired in the hospital for each age group
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+admission_hospital_agegp_data %>% 
+  group_by(age_group,did_the_patient_expire_in_hospital) %>% 
+  summarise(No_of_patients_died =n())  %>% 
+  filter(did_the_patient_expire_in_hospital=="Yes") %>%
+  select(age_group,No_of_patients_died)
+
+```
+
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Death rate in each age gp:
+admission_hospital_agegp_data %>% 
+  group_by(age_group) %>% 
+  ggplot()+
+  geom_bar(aes(x=age_group,fill=did_the_patient_expire_in_hospital),
+           position = "fill")+
+  labs(title = "Death rate in each age-group",fill="Patient expired?",y="Percentage")
+
+```
+
+**<span style="color: red;">Observation</span>:- Most death rate is in the age group 90+.**
+
+## PART 2
+
+### 1. How many patients were clinically diagnosed with infections?
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#No. of patents with clinically diagnosed infections
+Days_breakdown %>% 
+filter(clinically_diagnosed_infections=="Yes") %>%
+  distinct(parent_id) %>% 
+   tally(name = "No. of patents with clinically diagnosed infections")
+
+#patients with other infections and died in the hospital further analysis:
+infected_died<-
+merge(
+  x=Hospital_length_of_stay,
+  y=Days_breakdown,
+  by.x ='parent_id',
+  by.y = 'parent_id',
+  all.x = T
+) %>% 
+filter(clinically_diagnosed_infections=="Yes" & did_the_patient_expire_in_hospital=="Yes")
+
+#No. of patients with other infections and expired
+infected_died %>% 
+  distinct(id.x) %>% 
+  tally(name = "No. of patients with other infections and expired")
+
+#Count of patients with clinically diagnosed infections each day;Stacked bar chart with died and not died patients
+infect_day_plot<-
+merge(
+  x=Hospital_length_of_stay,
+  y=Days_breakdown,
+  by.x ='parent_id',
+  by.y = 'parent_id',
+  all.x = T
+) %>% 
+filter(clinically_diagnosed_infections=="Yes") %>% 
+  ggplot()+
+  geom_bar(aes(x=day),fill='green')+
+  labs(title = "Infections during hospital stay",subtitle = "Patients 1st 15 days in hospital")+
+  ylab("No. of patients")
+ 
+# % of died patients in the above gp
+infect_day_death_percnt_plot<-
+merge(
+  x=Hospital_length_of_stay,
+  y=Days_breakdown,
+  by.x ='parent_id',
+  by.y = 'parent_id',
+  all.x = T
+) %>% 
+filter(clinically_diagnosed_infections=="Yes") %>% 
+  ggplot()+
+  geom_bar(aes(x=day,fill=did_the_patient_expire_in_hospital),position = "fill")+
+  labs(title = "% of died and not died patients ",
+       subtitle = "In the previous graph ")+
+  ylab("Death rate in %")+
+  theme(legend.position = "bottom")+
+  guides(fill=guide_legend(title="Did the patient expire"))
+
+grid.arrange(infect_day_plot ,infect_day_death_percnt_plot,nrow = 1,ncol=2)
+
+#infected and died patients :-Age group and sex
+merge(
+  x=Data_at_admission_AgeGp,
+  y=infected_died,
+  by.x = 'id',
+  by.y = 'parent_id'
+) %>% 
+  distinct(id,age_group,sex) %>% 
+  ggplot()+
+  geom_bar(aes(x=age_group,fill=sex))+
+  labs(title = "No. of infected and died patients in different age group",
+       subtitle = "Stacked bar chart with sex of the patients ")+
+  ylab("No. of patients")
+         
+```
+
+*<span style="color: red;">Observation</span>:-*
+
+**1. 27 patients died amoung 87 those with clinically diagnosed infections.**
+
+**2.More no. of people were diagnosed with other infections on their 3rd or 4th day of their hospital stay. Mostly after the 7th day no infection readings but on 14th day showing some more infections reading. 25-30 % of the people who diagnosed infections expired in hospital. Those who got infections on 14th day ,45% passed away.** 
+
+**3. 76-90 age group has more no. of patients with clinically diagnosed infections and died in the hospital.**
+
+**4.In all age group male death rate was way higher than female.**
+
+### 2.	Visually analyze the data to see if there were vital changes during their stay.  Vitals include systolic bp, diastolic bp, temperature, and heart rate, wbc, rbc, hematocrit, platelet count.
+
+<span style="color: blue;">Temperature</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_Temp=mean(temperature.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_Temp,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in Temperature during the hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Normal temperature range:- 97 F (36.1 C) and 99 F (37.2 C); No significant Temp-variation .**
+
+<span style="color: blue;">Systolic_blood_pressure</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_sbp=mean(systolic_blood_pressure.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_sbp,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in systolic_blood_pressure during the hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Systolic bp normal reading 90-120:- <span style="color: red;">Sbp was significantly high</span> throughout these days in patients <span style="color: red;">above age 50</span>.**
+
+<span style="color: blue;">Diastolic_blood_pressure</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_dbp=mean(diastolic_blood_pressure.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_dbp,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in diastolic_blood_pressure during the hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Diastolic bp normal reading 60-80:-Dbp seemed to be in the normal levels.**
+
+<span style="color: blue;">Wbc</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_wbc=mean(wbc.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_wbc,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in WBC during the hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Normal WBC reading ranges 4.5 to 11.0 × 109/L:- First 4 days all age group show normal readings; age group 51-90 show steady increase during rest of the days. After 5th day it goes above 11,which is a concern.**
+
+<span style="color: blue;">Hematocrit</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_hemat=mean(hematocrit.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_hemat,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in hematocrit during the hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Normal levels of hematocrit for men range from 41% to 50%,for women is 36% to 48%:- Most patients in the normals reading range.**
+
+<span style="color: blue;">Platelet count</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_platelet=mean(platelet_count.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_platelet,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in platelet count during the hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Normal platelet count ranges from 150,000 to 450,000 platelets per microliter of blood:- All in the normal range,though age group 76 and above show lower levels.**
+
+<span style="color: blue;">Heart rate</span>
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+merge(
+  x = Data_at_admission_AgeGp,
+  y = Days_breakdown,
+  by.x = 'id',
+  by.y = 'parent_id',
+  all.x = T
+) %>%
+  filter(day<=10) %>% 
+ group_by(age_group,day) %>% 
+  summarise(
+    Avg_Heartrate=mean(heart_rate.y,na.rm=TRUE)
+    ) %>% 
+  ggplot(mapping = aes(x=day,y=Avg_Heartrate,color=age_group))+geom_point()+geom_line()+
+                  facet_wrap(~age_group)+
+  theme(legend.position = "none")+
+  labs(title = "Variation in Heart rate during hospital stay in different age group",
+       subtitle = "Considered first 10 days of data")
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+**Heart rate normal range 60-100:- All in normal range.**
+
+### 3.	Compare patients in the WARD vs ICU
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Count of WARD & ICU patients
+Data_at_admission %>% 
+  group_by(admission_disposition) %>% 
+  tally(name = "No.of patients")
+
+# Compare patients in WARD & ICU
+color_group1<- c("red","pink")   #making a color custom  palette
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=age,color=admission_disposition),size=1)+
+  scale_colour_manual(values=color_group1)+
+  labs(title = "Age:-WARD vs ICU patients")
+
+# Comparing Sbp WARD vs ICU patients
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=systolic_blood_pressure,color=admission_disposition),size=1)+
+  scale_colour_manual(values=color_group1)+
+  labs(title = "Sys_bp:-WARD vs ICU patients")
+
+# Comparing Resp_rate WARD vs ICU patients
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=respiratory_rate,color=admission_disposition),size=1)+
+  scale_colour_manual(values=color_group1)+
+  labs(title = "Resp_rate:-WARD vs ICU patients")
+
+# Comparing Oxy_sat WARD vs ICU patients
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=oxygen_saturation,color=admission_disposition),size=1)+
+  scale_colour_manual(values=color_group1)+
+  labs(title = "Oxy_sat:-WARD vs ICU patients")
+
+# checking comorbidities WARD vs ICU
+merge(
+ x=Data_at_admission,
+ y=longcomodata,
+ by.x="id",
+ by.y = "id",
+ all.x = T
+) %>% 
+  ggplot()+
+  geom_bar(aes(x=comorbidities.y,fill=admission_disposition))+
+  coord_flip()+
+  labs(title = "Comorbidities amoung WARD vs ICU patients")
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+*ICU patients:- *
+
+**1. Below 90 Oxygen-sat, 2. High Systolic-bp and Respiratory rate, 3. Hypertension & Diabetes are common comorbidities.** 
+
+### 4. Compare patients who expired and not-expired in hospital. 
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Comparing Vitals in Expired vs Not expired patients
+admission_hospital_data %>%
+ group_by(Patient_expired_in_hospital=did_the_patient_expire_in_hospital) %>% 
+  summarise(
+    Count=n(),
+    Avg_sys_bp = mean(systolic_blood_pressure,na.rm=TRUE),
+    Avg_dbp = mean(diastolic_blood_pressure,na.rm=TRUE),
+    Avg_resp = mean(respiratory_rate,na.rm=TRUE),
+    Avg_oxy = mean(oxygen_saturation,na.rm=TRUE),
+    Avg_wbc = mean(wbc,na.rm=TRUE),
+    Avg_rbc = mean(rbc,na.rm=TRUE),
+    Avg_Hematocrit = mean(hematocrit,na.rm=TRUE),
+    Avg_PlateletCount = mean(platelet_count,na.rm=TRUE),
+  )
+
+# Comparing age in Expired vs Not expired patients
+admission_hospital_data %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=age,color=did_the_patient_expire_in_hospital),size=1)+
+  labs(title = "Age:-Died vs Not died patients")+
+    theme(legend.position = "top", legend.box = "horizontal")
+
+
+# Comparing Sbp in Expired vs Not expired patients
+admission_hospital_data %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=systolic_blood_pressure,color=did_the_patient_expire_in_hospital),size=1)+
+  labs(title = "Sbp:-Died vs Not died patients")+
+    theme(legend.position = "top", legend.box = "horizontal")
+
+
+# Comparing Resp_rate Died vs Not died patients
+admission_hospital_data %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=respiratory_rate,color=did_the_patient_expire_in_hospital),size=1)+
+  labs(title = "Resp_rate:-WARD vs ICU patients")+
+    theme(legend.position = "top", legend.box = "horizontal")
+
+
+# Comparing Oxy_sat WARD vs ICU patients
+admission_hospital_data %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=oxygen_saturation,color=did_the_patient_expire_in_hospital),size=1)+
+  labs(title = "Oxy_sat:-Died vs Not died patients")+
+  theme(legend.position = "top", legend.box = "horizontal")
+
+```
+
+*<span style="color: red;">Observation</span>:- *
+**Higher levels of systolic bp and respiratory rate in died patients.**
+
+### 5. Compare intubated and not intubated patients
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Vitals Avg & SD of intubated and not intubated patients
+Data_at_admission %>% 
+  group_by(intubated) %>% 
+  summarise(
+    n(),
+    Avg_sys_bp = mean(systolic_blood_pressure,na.rm=T),
+    Std_sys_bp = sd(systolic_blood_pressure,na.rm=T),
+    Avg_Heartrate=mean(heart_rate,na.rm = T),
+    Std_Heartrate=sd(heart_rate,na.rm = T),
+    Avg_Resrate=mean(respiratory_rate,na.rm = T),
+    Std_Resrate=sd(respiratory_rate,na.rm = T),
+    Avg_OxySat=mean( oxygen_saturation,na.rm = T),
+    Std_OxySat=sd(oxygen_saturation,na.rm = T),
+    Avg_Temp=mean(temperature,na.rm = T),
+    Std_Temp=sd(temperature,na.rm = T),
+    Avg_dbp = mean(diastolic_blood_pressure,na.rm=TRUE),
+    Std_dbp = sd(diastolic_blood_pressure,na.rm=TRUE),
+    Avg_wbc = mean(wbc,na.rm=TRUE),
+    Std_wbc = sd(wbc,na.rm=TRUE),
+    Avg_rbc = mean(rbc,na.rm=TRUE),
+    Std_rbc = sd(rbc,na.rm=TRUE),
+    Avg_Hematocrit = mean(hematocrit,na.rm=TRUE),
+    Std_Hematocrit = sd(hematocrit,na.rm=TRUE),
+    Avg_PlateletCount = mean(platelet_count,na.rm=TRUE),
+    Std_PlateletCount = sd(platelet_count,na.rm=TRUE)
+  )
+
+# high std for Sbp,heartrate,resp-rate and platelet-count
+# plotting these vitals with high Std's to see the distribution of readings
+
+color_group1<- c("skyblue","red")   #making a color custom  palette
+
+RespDest<-
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=respiratory_rate,color=intubated))+
+  scale_colour_manual(values=color_group1)+  
+  labs(title = "Resp-rate destribution")+
+  theme(legend.position = "none")
+
+  SbpDest<-
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=systolic_blood_pressure,color=intubated))+
+  scale_colour_manual(values=color_group1)+  
+  labs(title = "Sbp destribution")+
+  theme(legend.position = "none")
+
+DbpDest<-
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=diastolic_blood_pressure,color=intubated))+
+  scale_colour_manual(values=color_group1)+  
+  labs(title = "Diastolic bp destribution")+
+  theme(legend.position = "none")
+
+PlatDest<-
+Data_at_admission %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=platelet_count,color=intubated))+
+  scale_colour_manual(values=color_group1)+  
+  labs(title = "platelet-count destribution")+
+  theme(legend.position = "top")
+
+print("Plotting Sbp,Dbp,Resp-rate,Platelet-count of patients who are intubated and not:")
+grid.arrange(RespDest,SbpDest,PlatDest,DbpDest,nrow=2,ncol=2)
+
+```
+
+*<span style="color: red;">Observation</span>:- *
+**Intubated patients definitely show some risky avg readings in Systolic bp,diastolic bp, respiratory rate and oxygen saturation.**
+
+  + a) Filtering died patients who were intubated:
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+Intu_Died <- 
+admission_hospital_data %>% 
+  filter(
+    intubated=="Yes" 
+    & did_the_patient_expire_in_hospital=="Yes"
+  ) 
+
+#t(Intu_Died)
+
+merge(
+  x=Intu_Died,
+  y=dataForLong,
+  by.x = 'id',
+  by.y = 'id',
+  all.x = T
+) %>% 
+  select(id,age,sex,hospital_length_of_stay,respiratory_rate,systolic_blood_pressure,oxygen_saturation,Comorbidities)%>%  arrange(hospital_length_of_stay)       
+# checking comorbiditie of intubated and died patients and their hospital length of stay
+
+```
+
+*<span style="color: red;">Observation</span>:- *
+
+**1.Patients with Chronic cardiac disease died within 5-6 days.**
+
+**2.Patients with all the 3 comorbidities Hypertension,Diabetes and High cholesterol were at high risk.**
+
+**3.Most of them had very high level of respiratory rate and systolic bp.**
+
+ + b) Died patients who were not intubated:
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Died patients who were not intubated 
+Not_Intub_Died <-
+admission_hospital_data %>% 
+  filter(
+    intubated=="No" 
+    & did_the_patient_expire_in_hospital=="Yes"
+  )  
+
+#No.of died patients who were not intubated
+Not_Intub_Died %>% 
+  tally(name = "No.of died patients who were not intubated")
+
+#No.of male and female died patients who were not intubated
+Not_Intub_Died %>% 
+  group_by(sex) %>% 
+  tally(name = "No.of died patients who were not intubated")
+
+# ICU, not died and not intubated patients
+Not_Intub_ICU_Ndied <-
+admission_hospital_data %>%
+  filter(
+    intubated=="No"
+    & admission_disposition=="ICU"
+    & did_the_patient_expire_in_hospital=="No"
+  )       
+
+```
+
+ + b1) Not intubated ,died patients in ICU
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Not intubated ,died patients in ICU
+Nint_Died_ICU<-
+Not_Intub_Died %>% 
+  filter(admission_disposition=="ICU")
+#Nint_Died_ICU
+#No.of Not intubated ,died patients in ICU
+Nint_Died_ICU %>% 
+  tally(name = "Not intubated ,died patients in ICU")
+
+#Nint_Died_ICU
+Nint_Died_ICU %>% 
+  select(age,sex,Sbp=systolic_blood_pressure,Dbp=diastolic_blood_pressure,Resp_rate=respiratory_rate,Oxy_sat=oxygen_saturation,HospDays=hospital_length_of_stay,days_to_first_covid19_test_negative)
+
+```
+
+
+*<span style="color: red;">Observation</span>:-*
+
+DIED ICU PATIENTS WHO WERE NOT INTUBATED: 
+**There were 7 ICU patients.Most of them stayed in the hospital more than 20 days.Chronic cardiac disease, Hypertension  and Chronic renal Diabetes were most common comorbodities.**
+
+ + b2) Not intubated ,died patients in WARD
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#Patients in WARD(not intubated) and expired in hospital
+
+Nint_Died_WARD<-
+Not_Intub_Died %>% 
+  filter(admission_disposition=="WARD") 
+
+#No. of patients in WARD(not intubated) and expired in hospital
+Nint_Died_WARD%>% 
+ tally(name="Not-Int died patients in Ward")
+
+# Plotting Sbp in WARD died patients
+ward_died_sbp<-
+Nint_Died_WARD %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=systolic_blood_pressure))+
+  geom_hline(yintercept = mean(Data_at_admission$systolic_blood_pressure, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  geom_hline(yintercept = mean(Not_Intub_Died$systolic_blood_pressure, na.rm=TRUE), color='red', lty='dashed', lwd=1)+
+  labs(title = "Systolic_blood_pressure of patients")
+
+# Plotting resp_rate in WARD died patients
+ward_died_resp<-
+Nint_Died_WARD %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=respiratory_rate))+
+  geom_hline(yintercept = mean(Data_at_admission$respiratory_rate, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  geom_hline(yintercept = mean(Not_Intub_Died$respiratory_rate, na.rm=TRUE), color='red', lty='dashed', lwd=1)+
+  labs(title = "Respiratory_rate of patients")
+
+# Plotting oxy_sat in WARD died patients
+ward_died_oxysat<-
+Nint_Died_WARD %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=oxygen_saturation))+
+  geom_hline(yintercept = mean(Data_at_admission$oxygen_saturation, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  geom_hline(yintercept = mean(Not_Intub_Died$oxygen_saturation, na.rm=TRUE), color='red', lty='dashed', lwd=1)+
+labs(title = "Oxygen_saturation of patients",                                                                                                        subtitle = "Not intubated, died WARD patients")
+
+# Plotting heart rate in WARD died patients
+ward_died_heart<-
+Nint_Died_WARD %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=heart_rate))+
+  geom_hline(yintercept = mean(Data_at_admission$heart_rate, na.rm=TRUE), color='green', lty='dashed', lwd=1)+
+  geom_hline(yintercept = mean(Not_Intub_Died$heart_rate, na.rm=TRUE), color='red', lty='dashed', lwd=1)+
+  labs(title = "Heart_rate of patients",subtitle = "Dataset avg in green,subset avg in red line")
+
+grid.arrange(ward_died_oxysat,ward_died_heart,ward_died_resp,ward_died_sbp,nrow=2,ncol=2)
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+**The avg reading of this particular subset(Not intubated,died WARD patients) and of the entire data set do not vary much.**
+
+ + c)Not intubated,died patients in ICU and WARD comparison:
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#Not intubated,died patients in ICU and WARD comparison
+# ICU_WARD_union<-
+#   union(Nint_Died_WARD,Nint_Died_ICU)
+# it is the same as Not_Intub_Died df
+
+# Age comparison of Not intubated,died patients in ICU and WARD
+ICU_WARD_age<-
+Not_Intub_Died %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=age,color=admission_disposition))+
+  geom_point(aes(x=id,y=age))+
+  labs(title = "Age comparison: WARD vs ICU")+
+  theme(legend.position = "none")
+
+# SBP comparison of Not intubated,died patients in ICU and WARD
+ICU_WARD_Sbp<-
+Not_Intub_Died %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=systolic_blood_pressure,color=admission_disposition))+
+  geom_point(aes(x=id,y=systolic_blood_pressure))+
+  theme(legend.position = "none")+
+  labs(title = "Sbp comparison: WARD vs ICU", subtitle = "Died patients, not intubated")
+
+# resp-rate comparison of Not intubated,died patients in ICU and WARD
+ICU_WARD_Resp_rate<-
+Not_Intub_Died %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=respiratory_rate,color=admission_disposition))+
+  geom_point(aes(x=id,y=respiratory_rate))+
+  labs(title = "Resp_rate comparison: WARD vs ICU")+
+  theme(legend.position = "top",legend.box = "horizontal")
+
+# Oxygen_sat comparison of Not intubated,died patients in ICU and WARD
+ICU_WARD_Oxy_sat<-
+Not_Intub_Died %>% 
+  ggplot()+
+  geom_line(aes(x=id,y=oxygen_saturation,color=admission_disposition))+
+  geom_point(aes(x=id,y=oxygen_saturation))+
+  labs(title = "Oxy_sat comparison: WARD vs ICU")+
+  theme(legend.position = "none")
+
+grid.arrange(ICU_WARD_Resp_rate,ICU_WARD_Sbp,ICU_WARD_Oxy_sat,ICU_WARD_age,nrow=2,ncol=2)
+
+```
+
+
+**<span style="color: red;">Observation</span>:- Viz supports the above findings about vitals, ICU patients show younger crowd**
+
+### 6. Compare ICU patients who got intubated and not intubated
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# No. of ICU patients
+Data_at_admission %>% 
+  filter(admission_disposition=="ICU") %>%
+  tally(name="No_of_ICU_patients")    
+
+# No. of intu and not intu icu patients
+Data_at_admission %>% 
+  filter(admission_disposition=="ICU") %>%
+  group_by(intubated) %>% 
+  tally(name="No_of_ICU_patients")      
+
+# ICU patients
+ICU_patients<-
+admission_hospital_agegp_data %>% 
+  filter(admission_disposition=="ICU") 
+#ICU_patients
+
+# No.of ICU patients in different age gp
+ICU_patients %>% 
+  group_by(age_group) %>% 
+  summarise(
+    No_of_ICUpatients=n()
+  )
+
+ICU_oxy<-
+ICU_patients %>% 
+  ggplot()+ geom_line(aes(x=id,y=oxygen_saturation,color=intubated))+
+  geom_point(aes(x=id,y=oxygen_saturation,size=did_the_patient_expire_in_hospital),color="brown")+
+  labs(title = "ICU patients Oxy-Sat")+
+#  theme(legend.position = "top",legend.box = "vertical")+
+#  guides(size=guide_legend(title ="Patient died"))
+  theme(legend.position = "none")    
+
+# Res-rate of intubated and not intubated ICU patients  
+ICU_resp<-
+ICU_patients %>% 
+  ggplot()+ geom_line(aes(x=id,y=respiratory_rate,color=intubated))+
+  geom_point(aes(x=id,y=respiratory_rate,size=did_the_patient_expire_in_hospital),color="brown")+
+  theme(legend.position="top",
+        legend.box = "horizontal")+
+  labs(title = "ICU patients Resp-rate")+
+  guides(size=guide_legend(title ="Patient died"))
+
+# Sbp of intubated and not intubated ICU patients
+ICU_Sbp<-
+ICU_patients %>% 
+  ggplot()+ 
+  geom_line(aes(x=id,y=systolic_blood_pressure,color=intubated))+
+  geom_point(aes(x=id,y=systolic_blood_pressure,
+                                                                            size=did_the_patient_expire_in_hospital),color="brown")+
+  labs(title = "ICU patients-Sbp")+
+#  theme(legend.position = "top",legend.box = "vertical")+
+#  guides(size=guide_legend(title ="Patient died"))+
+  theme(legend.position = "none")
+
+ICU_resp
+ICU_Sbp
+ICU_oxy
+grid.arrange(ICU_Sbp,ICU_oxy,ICU_resp,nrow=2,ncol=2)
+
+# Death rate of ICU patients 
+ICU_patients %>%
+  ggplot()+
+  geom_bar(aes(x=intubated,fill=did_the_patient_expire_in_hospital),position="fill")+
+  labs(title = "Death rate in ICU patients",
+       fill="Patient expired?",y="Percentage",x="Intubated")
+
+```
+
+*<span style="color: red;">Observation</span>:- *
+
+**1.There were 43 ICU patients, more in the age group 51-75.**
+
+**2.There were 15 intubated and 28 not intubated patients.**
+
+**3.Intibated patients shows higher levels of respiratory rate, systolic blood pressure and oxygen saturation.**
+
+**4.Death rate is more among intubated patients in ICU**
+
+### 7. Comparison Visualization
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#ICU-died:-intubated & not intubated patients
+# (a)Intubated -- Intu_Died
+# (b) Not intubated -- Nint_Died_ICU
+#combining the above 2 dfs for comparison VIZES
+DFunion<- union(Intu_Died,Nint_Died_ICU) 
+#DFunion
+```
+
+ + (a)ICU-died:-intubated & not intubated patients
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+#Comparing ICU-Died:- intu & not vitals
+ICU_INT_notINT_heartrate<-
+DFunion %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=heart_rate,color=intubated))+
+  geom_line(aes(x=id,y=heart_rate,color=intubated))+
+  labs(title = "Heartrate comparison",subtitle = "ICU died patients intubated and not")+
+  theme(legend.position = "top")
+
+ICU_INT_notINT_resprate<-
+DFunion %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=respiratory_rate,color=intubated))+
+  geom_line(aes(x=id,y=respiratory_rate,color=intubated))+
+  labs(title = "Respiratory rate comparison",subtitle = "ICU died patients intubated and not")+
+  theme(legend.position = "top")
+
+ICU_INT_notINT_age<-
+DFunion %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=age,color=intubated))+
+  geom_line(aes(x=id,y=age,color=intubated))+
+  labs(title = "Age comparison",subtitle = "ICU patients intubated and not")+
+  theme(legend.position = "top")
+
+ICU_INT_notINT_sbp<-
+DFunion %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=systolic_blood_pressure,color=intubated))+
+  geom_line(aes(x=id,y=systolic_blood_pressure,color=intubated))+
+  labs(title = "Sbp comparison",subtitle = "ICU patients intubated and not")+
+  theme(legend.position = "top")
+
+grid.arrange(ICU_INT_notINT_heartrate,ICU_INT_notINT_resprate,ICU_INT_notINT_age,ICU_INT_notINT_sbp,nrow=2,ncol=2)
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+
+**ICU-died patients:- Intubated patients-- Higher levels of Heart rate, respiratory, Sbp than not intubated ones**
+
+ + (b)ICU-NotInt:-died and not died
+ 
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# ICU-NotInt:-died and not died
+#(a)ICU-NotInt:-died -- Nint_Died_ICU,(b)ICU-NotInt:-NotDied  --Not_Intub_ICU_Ndied 
+DFunionNID<-union(Nint_Died_ICU,Not_Intub_ICU_Ndied)
+
+ICU_notINT_diedNnot_age<-
+DFunionNID %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=age,color=did_the_patient_expire_in_hospital))+
+  geom_line(aes(x=id,y=age,color=did_the_patient_expire_in_hospital))+
+  labs(title = "Age comparison:- died and not died",subtitle = "ICU not intubated patients")+
+  theme(legend.position = "none")
+
+ICU_notINT_diedNnot_resp<-
+DFunionNID %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=respiratory_rate,color=did_the_patient_expire_in_hospital))+
+  geom_line(aes(x=id,y=respiratory_rate,color=did_the_patient_expire_in_hospital))+
+  labs(title = "Resp comparison:- died and not died",subtitle = "ICU not intubated patients")+
+  theme(legend.position = "none")
+
+ICU_notINT_diedNnot_Hrate<-
+DFunionNID %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=heart_rate,color=did_the_patient_expire_in_hospital))+
+  geom_line(aes(x=id,y=heart_rate,color=did_the_patient_expire_in_hospital))+
+  labs(title = "Hrate comparison:- died and not died",subtitle = "ICU not intubated patients")+
+  theme(legend.position = "top")+
+  guides(color=guide_legend(title="Did the patient expire"))
+
+ICU_notINT_diedNnot_sbp<-
+DFunionNID %>% 
+  ggplot()+
+  geom_point(aes(x=id,
+                 y=systolic_blood_pressure,color=did_the_patient_expire_in_hospital))+
+  geom_line(aes(x=id,
+                y=systolic_blood_pressure,color=did_the_patient_expire_in_hospital))+
+  labs(title = "Sbp comparison:- died and not died",subtitle = "ICU not intubated patients")+
+  theme(legend.position = "top")+
+  guides(color=guide_legend(title="Did the patient expire"))
+
+grid.arrange(ICU_notINT_diedNnot_sbp,ICU_notINT_diedNnot_Hrate,ICU_notINT_diedNnot_resp,
+             ICU_notINT_diedNnot_age,nrow=2,ncol=2)
+
+```
+
+*<span style="color: red;">Observation</span>:-*
+
+**ICU-Not Intubated patients:-Higher levels of Sbp in died patients than not died ones**
+
+## PART 3
+
+### 1. As patients admitted with varies of reasons filtering the patients admitted with the specific reason of COVID-19.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# filtering patients admitted with Covid-19
+# no.of patients
+Data_at_admission %>% 
+  filter(reason_for_admission== "COVID-19 [U07.1]") %>% 
+  tally(name="patients admitted with Covid-19")
+
+# how many died
+admission_hospital_agegp_data %>% 
+  filter(reason_for_admission== "COVID-19 [U07.1]") %>% 
+  group_by(did_the_patient_expire_in_hospital) %>% 
+  tally()
+
+#Days_to_test_negative
+admission_hospital_agegp_data %>% 
+  filter(reason_for_admission== "COVID-19 [U07.1]") %>% 
+  select(id,Days_to_test_negative=days_to_first_covid19_test_negative) %>% 
+  na.omit() %>% 
+  ggplot()+
+  geom_point(aes(x=id,y=Days_to_test_negative),color="red")+
+  labs(title = "Days_to_test_negative",
+       subtitle = "14/217 patients tested -ve(as per data)")
+```
+
+
+### 2. Checking the vitals of patients admitted with the specific reason of COVID-19
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,class.output="bg-success"}
+# Assigning the vitals to be checked to vitals
+vitals<-c("systolic_blood_pressure","respiratory_rate","oxygen_saturation")
+
+# Create a function to return a graph with the input vital.
+
+viz<-function(z)
+{
+graph<-
+  admission_hospital_agegp_data %>% 
+  filter(reason_for_admission== "COVID-19 [U07.1]") %>% 
+  select(x=id,y=all_of(z),w=did_the_patient_expire_in_hospital) %>% 
+  ggplot()+
+  geom_line(aes(x=x,y=y,color=w),size=1)+
+  labs("Covid patients(Died/not died) Vitals")+
+  xlab("id") +
+  ylab(z)+
+  labs(title = "Vitals:Patients admitted with COVID-19",
+       subtitle = z,color="Patient expired?")
+return(graph)
+}
+
+# Calling the function viz to see a particular variable graph.
+#viz("systolic_blood_pressure")
+
+# for loop to check more vitals
+
+for (a in vitals) {
+  G<-viz(a)
+  print(G)
+ }
+```
+
+
+*<span style="color: red;">Observation</span>:-*
+**Showing high peaks of respiratory-rate in expired patients.**
+
+
+# ANALYSIS RESULTS:- 
+
+**1.Total Patients in the data set: 508 (296M,212F)**
+
+**2.Most no. of patients in the age of 60s and 70s.**
+
+**3.Total patients died: 90(59M,31F),(83 Intubated, 7 Not),(14 ICU[7 Intu,7 Not],76 WARD), more people died in the age-group 76-90 **
+
+**4.Total ICU patients: 43(15 Intu, 28 Not)**
+
+**5.Oxygen saturation was significantly low and respiratory rate was high in ICU patients(43 ICU/465 WARD patients),Oxygen saturation below 90% is very concerning and indicates an emergency.**
+
+**6.Most common Comorbidities in the patients:-Hypertension (310/508), Diabetes (175/308), Chronic cardiac disease (88/508). And 400/508 patients have other medical conditions**
+
+**7.Systolic-blood-pressure,Respiratory-rate and oxygen-saturation were risky vital levels.**
+
